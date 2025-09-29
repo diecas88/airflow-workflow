@@ -1,1 +1,14 @@
 # Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
+
+# HTTP provider for API calls
+apache-airflow-providers-http==4.5.0
+
+# PostgreSQL provider for database operations
+apache-airflow-providers-postgres==5.7.0
+
+# BigQuery provider for Google Cloud BigQuery operations
+apache-airflow-providers-google==10.12.0
+
+# Note: PostgreSQL support is likely already included in the Astro runtime
+# If you need additional PostgreSQL libraries, uncomment the line below:
+# psycopg2-binary==2.9.7
