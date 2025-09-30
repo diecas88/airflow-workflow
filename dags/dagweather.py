@@ -2,6 +2,9 @@ from airflow import DAG
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+# from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+import boto3
+from airflow.hooks.base import BaseHook
 from airflow.decorators import task
 from datetime import datetime, timedelta
 import requests
@@ -14,6 +17,7 @@ LONGITUDE = '-0.1278'
 POSTGRES_CONN_ID = 'postgres_default'
 API_CONN_ID = 'open_meteo_api'
 BIGQUERY_CONN_ID = 'bigquery_default'
+MINIO_CONN_ID = 'minio_s3'
 
 # Default arguments for the DAG
 default_args = {
@@ -34,8 +38,57 @@ with DAG(
 ) as dag:
 
     @task()
-    def extract_weather_data(): 
-        """extract weather data from the open-meteo API""" 
+    def test_minio_connection():
+        """Test MinIO connection using boto3 with Airflow connection"""
+        try:
+            # Get MinIO connection from Airflow
+            conn = BaseHook.get_connection(MINIO_CONN_ID)
+            
+            # Initialize boto3 client for MinIO
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=conn.extra_dejson.get('endpoint_url', conn.host),
+                aws_access_key_id=conn.extra_dejson.get('aws_access_key_id', conn.login),
+                aws_secret_access_key=conn.extra_dejson.get('aws_secret_access_key', conn.password),
+                region_name=conn.extra_dejson.get('region_name', 'us-east-1')
+            )
+            
+            # Test connection by listing buckets
+            response = s3_client.list_buckets()
+            buckets = response['Buckets']
+            print(f"✅ MinIO connection successful! Found {len(buckets)} buckets: {[bucket['Name'] for bucket in buckets]}")
+            
+            # Create a test file in the airflow bucket
+            test_content = "MinIO connection test - Weather DAG validation"
+            s3_client.put_object(
+                Bucket='airflow',
+                Key='test/connection_test.txt',
+                Body=test_content
+            )
+            print("✅ Test file created successfully in MinIO bucket 'airflow'")
+            
+            # Verify the file was created
+            response = s3_client.list_objects_v2(Bucket='airflow', Prefix='test/')
+            files = [obj['Key'] for obj in response.get('Contents', [])]
+            print(f"✅ Files in test folder: {files}")
+            
+            return {
+                "status": "success",
+                "buckets": len(buckets),
+                "test_file_created": True,
+                "message": "MinIO connection validated successfully"
+            }
+            
+        except Exception as e:
+            print(f"❌ MinIO connection failed: {str(e)}")
+            raise Exception(f"MinIO connection test failed: {str(e)}")
+
+    @task()
+    def extract_weather_data(minio_test_result): 
+        """extract weather data from the open-meteo API - only runs if MinIO test passes"""
+        print(f"MinIO test result: {minio_test_result}")
+        print("✅ MinIO test passed, proceeding with weather data extraction...")
+        
         # http hook to extract weather data from the open-meteo API
         http_hook = HttpHook(method='GET', http_conn_id=API_CONN_ID)
         #api endpoint
@@ -128,10 +181,10 @@ with DAG(
         bq_hook.run_query(sql=insert_sql, use_legacy_sql=False)
         print("Weather data successfully loaded to BigQuery")
 
-    ## dag workflow
-    weather_data = extract_weather_data()
+    minio_test = test_minio_connection()
+
+    weather_data = extract_weather_data(minio_test)
     transformed_data = transform_weather_data(weather_data)
     load_weather_data(transformed_data)
-    load_to_bigquery(transformed_data)
-    #weather_data >> transformed_data >> load_weather_data
+    # load_to_bigquery(transformed_data)
 
