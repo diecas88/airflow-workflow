@@ -6,15 +6,13 @@ apache-airflow-providers-http==4.5.0
 # PostgreSQL provider for database operations
 apache-airflow-providers-postgres==5.7.0
 
-# BigQuery provider for Google Cloud BigQuery operations
-apache-airflow-providers-google==10.12.0
+# BigQuery provider for Google Cloud BigQuery operations - updated to compatible version
+apache-airflow-providers-google==10.8.0
 
-# AWS provider for S3/MinIO operations (commented out due to compatibility issues)
-# apache-airflow-providers-amazon==8.0.0
+# AWS provider for S3/MinIO operations - removed due to compatibility issues
+# apache-airflow-providers-amazon==8.10.0
 
 # boto3 for direct S3/MinIO operations
 boto3==1.34.0
 
-# Note: PostgreSQL support is likely already included in the Astro runtime
-# If you need additional PostgreSQL libraries, uncomment the line below:
 # psycopg2-binary==2.9.7
