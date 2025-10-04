@@ -29,7 +29,5 @@ services:
        mc policy set public local/airflow || true &&
        sleep infinity"
 
-  # Your existing Astro services will be added here when you run astro dev start
-
 volumes:
   minio_data:

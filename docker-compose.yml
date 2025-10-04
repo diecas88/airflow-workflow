@@ -16,7 +16,5 @@ services:
       timeout: 5s
       retries: 5
 
-  # Your existing Astro services will be added here when you run astro dev start
-
 volumes:
   postgres_data:
