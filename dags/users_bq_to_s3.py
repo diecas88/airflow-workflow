@@ -9,16 +9,9 @@ import csv
 import io
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
+import boto3
 
-from credentials import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, BUCKET_NAME, REGION_NAME, OBJECT_KEY
-
-# Replace with your specific details
-GCP_PROJECT_ID = "bigquery-course-464012"
-BQ_DATASET_TABLE = "airflow.users01"
-GCS_BUCKET_NAME = "users01bucket"
-GCS_FILE_PATH = "bq_export_data.csv"
-S3_BUCKET_NAME = BUCKET_NAME
-S3_KEY = "bq_data/bq_export_data.csv"
+from credentials import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, BUCKET_NAME, REGION_NAME, OBJECT_KEY, GCP_PROJECT_ID, BQ_DATASET_TABLE, GCS_BUCKET_NAME, GCS_FILE_PATH, S3_BUCKET_NAME, S3_KEY
 
 default_args = {
     'owner': 'airflow',
@@ -35,7 +28,7 @@ with DAG(
 
     start_task = EmptyOperator(
         task_id="start",
-        doc_md="This is an empty operator that does nothing"
+        doc_md="this starts the task export_bq_to_gcs"
     )
 
     def failed_task():
@@ -98,6 +91,41 @@ with DAG(
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
-    # Call the task function
-    start_task >> export_bq_to_gcs() >> [fail_copy, success_copy]
+    start_s3_task = EmptyOperator(
+        task_id="start_s3_task",
+        doc_md="this starts the task load_users_to_s3"
+    )
 
+    @task()
+    def transfer_gcs_to_s3():
+        """Transfer file from GCS to S3"""
+        try:
+            # Download from GCS
+            gcs_hook = GCSHook(gcp_conn_id="bigquery_default")
+            file_data = gcs_hook.download(
+                bucket_name=GCS_BUCKET_NAME,
+                object_name=GCS_FILE_PATH
+            )
+            
+            # Upload to S3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                region_name=REGION_NAME
+            )
+            
+            s3_client.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=S3_KEY,
+                Body=file_data
+            )
+            
+            print(f"SUCCESS: File transferred from GCS to S3: s3://{S3_BUCKET_NAME}/{S3_KEY}")
+            
+        except Exception as e:
+            print(f"ERROR: {e}")
+            raise e
+    # Call the task function with conditional logic
+    start_task >> export_bq_to_gcs() >> [fail_copy, success_copy]
+    success_copy >> start_s3_task >> transfer_gcs_to_s3()
